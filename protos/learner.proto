@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package learner;
+
+service LearnerService {
+    rpc StartTraining(Empty) returns (Ack) {};
+    rpc SyncModelState(ModelState) returns (Ack) {};
+}
+
+message ModelState {
+    bytes chunk = 1;
+}
+
+message Empty {}
+
+message Ack {
+    bool success = 1;
+    string message = 2;
+}

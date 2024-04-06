@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package leader;
+
+service LeaderService {
+    rpc RegisterLearner(LearnerInfo) returns (AckWithMetadata) {};
+    rpc GetModel(Empty) returns (stream ModelChunk) {};
+    rpc GetData(LearnerDataRequest) returns (stream DataChunk) {};
+    rpc AccumulateGradients(GradientData) returns (Ack) {};
+}
+
+message LearnerInfo {
+    string network_addr = 1;
+}
+
+message LearnerDataRequest {
+    string network_addr = 1;
+}
+
+message AckWithMetadata {
+    bool success = 1;
+    string message = 2;
+    int32 learner_id = 3;
+    int32 max_learners = 4;
+}
+
+message Ack {
+    bool success = 1;
+    string message = 2;
+}
+
+message Empty {}
+
+message ModelChunk {
+    bytes chunk = 1;
+}
+
+message DataChunk {
+    bytes chunk = 1;
+}
+
+message GradientData {
+    bytes chunk = 1;
+}

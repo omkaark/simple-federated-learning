@@ -1,0 +1,12 @@
+.venv
+.vscode
+__pycache__
+data
+*/data
+*/model
+get_files_for_gpt.py
+model_copy.pth
+prompt.txt
+experiments
+learner_model_artifacts
+*.pth
