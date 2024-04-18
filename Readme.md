@@ -2,7 +2,7 @@
   <img src="https://github.com/omkaark/simple-federated-learning/assets/20964404/2a098f38-c7d0-4cc3-9f51-a1af8ecd835a" height="300" alt="Simple Federated Learning" />
 </p>
 <p align="center">
-  <em>Federated Learning for local networks</em>
+  <em>Federated Learning for local networks (photo credit: Parth Sareen's expert prompt engineering talent)</em>
 </p>
 
 # Federated Learning Setup Guide
