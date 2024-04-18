@@ -1,3 +1,10 @@
+<p align="center">
+  <img src="https://github.com/omkaark/simple-federated-learning/assets/20964404/2a098f38-c7d0-4cc3-9f51-a1af8ecd835a" height="300" alt="Simple Federated Learning" />
+</p>
+<p align="center">
+  <em>Federated Learning for local networks</em>
+</p>
+
 # Federated Learning Setup Guide
 
 This guide provides step-by-step instructions on how to set up and run a federated learning system with a central leader and multiple learners.
@@ -14,7 +21,7 @@ Before you begin, ensure you have the following requirements installed:
 
 ### Install Required Packages
 
-Navigate to the project directory and install the required Python packages:
+Navigate to the project directory and install the required Python packages (preferrable in an [environment](https://docs.python.org/3/library/venv.html):
 
 ```bash
 pip install -r requirements.txt
@@ -22,7 +29,7 @@ pip install -r requirements.txt
 
 ### Prepare Model Artifacts
 
-Add your `model.py` file to the `model_artifacts` directory. This file should define the necessary components including device, model, criterion, and `optimizer_function`.
+Add your `model.py` file to the `model_artifacts` directory. This file should define the necessary variables including `device`, `model`, `criterion`, and `optimizer_function`. Check out my resnet-18 example model at model_artifacts/model.py If you want to change the model from Resnet to anything else, make sure you change it here: `model = <MODEL-DEF-GOES-HERE>`
 
 ### Configure Data Loader
 
@@ -42,7 +49,7 @@ Run the leader script specifying the number of learners to wait for:
 python leader.py --learner-count X
 ```
 
-Replace `X` with the number of learners you want.
+Replace `X` with the number of learners you want (# of computers you want to run training on).
 
 ### Start the Learners
 
