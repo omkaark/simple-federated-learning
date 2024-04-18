@@ -27,43 +27,39 @@ class LeaderService(leader_pb2_grpc.LeaderServiceServicer):
         self.max_learners = learner_count
         self.learner_list = []
         self.gradient_list = []
+        self.data_loader, self.val_loader, self.num_batches = get_data_loader(max_learners=self.max_learners)
         self.global_model = model
         self.global_optimizer = optimizer_function(self.global_model)
         self.device = device
-        self.num_batches = None
         self.accumulation_count = 0
         logging.info("Leader service initialized")
 
     def RegisterLearner(self, request, context):
-        # lock needed to handle learner_list with thread safety
-        with self.lock:
-            logging.info(f"Registering learner: network_addr={request.network_addr}")
-            if len(self.learner_list) < self.max_learners:
-                # learners < expected, then register them
+        logging.info(f"Registering learner: network_addr={request.network_addr}")
+        if len(self.learner_list) < self.max_learners:
+            # learners < expected, then register them
+            new_id = len(self.learner_list)
+            learner_stub = learner_pb2_grpc.LearnerServiceStub(
+                grpc.insecure_channel(request.network_addr, options=GRPC_STUB_OPTIONS)
+            )
+            new_id = 0
+            with self.lock:
                 new_id = len(self.learner_list)
-                learner_stub = learner_pb2_grpc.LearnerServiceStub(
-                    grpc.insecure_channel(request.network_addr, options=GRPC_STUB_OPTIONS)
-                )
-                # give it the data loader generator
-                data_loader, num_batches = get_data_loader(learner_id=new_id, max_learners=self.max_learners)
                 # knowing num_batches allows to know when training is done, all learners should have equal # od batches
-                self.num_batches = num_batches
-                self.learner_list.append(
-                    {
+                self.learner_list.append({
                         'id': new_id,
                         'network_addr': request.network_addr,
                         'batches_consumed': 0, 
                         'stub': learner_stub,
-                        'data_loader': data_loader,
-                    }
-                )
-                # if learners = expected, then start training on all of them
-                if len(self.learner_list) == self.max_learners:
-                    thread = threading.Thread(target=self.start_training)
-                    thread.start()
-                return leader_pb2.AckWithMetadata(success=True, message="Registered learner", learner_id=new_id, max_learners=self.max_learners)
-            else:
-                return leader_pb2.Ack(success=False, message="Max learners reached")
+                        'data_loader': self.data_loader[new_id],
+                    })
+            # if learners = expected, then start training on all of them
+            if new_id + 1 == self.max_learners:
+                thread = threading.Thread(target=self.start_training)
+                thread.start()
+            return leader_pb2.AckWithMetadata(success=True, message="Registered learner", learner_id=new_id, max_learners=self.max_learners)
+        else:
+            return leader_pb2.Ack(success=False, message="Max learners reached")
 
     def start_training(self):
         time.sleep(3) # Start up time for the last learner
@@ -101,21 +97,23 @@ class LeaderService(leader_pb2_grpc.LeaderServiceServicer):
         end_index = min(start_index + 10, self.num_batches)
         
         # check if there are batches left to send
-        if start_index < self.num_batches:
-            for i, (input, labels) in enumerate(learner['data_loader']):
-                # send only data batches that fall in the start to end index range
-                if start_index <= i < end_index:
-                    buffer = io.BytesIO()
-                    torch.save((input, labels), buffer)
-                    buffer.seek(0)
-                    serialized_batch = buffer.read()
-                    yield leader_pb2.DataChunk(chunk=serialized_batch)
-                    learner['batches_consumed'] += 1
-
-            logging.info(f"Learner {learner['id']} is getting batches {start_index + 1} to {end_index} of {self.num_batches}")
-        else:
+        if start_index >= self.num_batches:
             # when nothing is sent back to learner, the learner gracefully quits itself
             logging.info(f"No more batches to send to learner {learner['id']}.")
+        
+        for i, (input, labels) in enumerate(learner['data_loader']):
+            # send only data batches that fall in the start to end index range
+            if start_index <= i < end_index:
+                buffer = io.BytesIO()
+                torch.save((input, labels), buffer)
+                buffer.seek(0)
+                serialized_batch = buffer.read()
+                yield leader_pb2.DataChunk(chunk=serialized_batch)
+                learner['batches_consumed'] += 1
+
+        logging.info(f"Learner {learner['id']} is getting batches {start_index + 1} to {end_index} of {self.num_batches}")
+
+            
 
     def AccumulateGradients(self, request, context):
         # needs to be thread safe for gradient_list to handle accumulations properly
@@ -189,7 +187,7 @@ class LeaderService(leader_pb2_grpc.LeaderServiceServicer):
         with torch.no_grad():
             correct = 0
             total = 0
-            for inputs, labels in get_data_loader(valid=True):
+            for inputs, labels in self.val_loader:
                 inputs = inputs.to(device)
                 labels = labels.to(device)
                 outputs = self.global_model(inputs)
