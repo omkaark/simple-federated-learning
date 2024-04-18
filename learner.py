@@ -152,7 +152,7 @@ class LearnerService(learner_pb2_grpc.LearnerServiceServicer):
         
         return learner_pb2.Ack(success=True, message="Model state synchronized successfully")
 
-def serve(network_addr, learner_port, leader_stub):
+def serve(network_addr, learner_port, leader_stub, learner_info):
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=5), options=GRPC_STUB_OPTIONS)
     learner_service = LearnerService(network_addr, leader_stub)
     learner_pb2_grpc.add_LearnerServiceServicer_to_server(learner_service, server)
@@ -164,6 +164,7 @@ def serve(network_addr, learner_port, leader_stub):
         while True:
             time.sleep(86400)
     except KeyboardInterrupt:
+        leader_stub.DropLearner(learner_info)
         server.stop(0)
 
 def parse_args():
@@ -187,6 +188,6 @@ if __name__ == '__main__':
     logging.info('Registering learner...')
     is_registered = leader_stub.RegisterLearner(learner_info)
     if is_registered.success:
-        serve(network_addr, learner_port, leader_stub)
+        serve(network_addr, learner_port, leader_stub, learner_info)
     else:
         logging.error('Registering learner unsuccessful')

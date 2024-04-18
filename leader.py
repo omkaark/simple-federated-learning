@@ -25,38 +25,46 @@ class LeaderService(leader_pb2_grpc.LeaderServiceServicer):
     def __init__(self, learner_count):
         self.lock = threading.Lock()
         self.max_learners = learner_count
-        self.learner_list = []
+        self.learners = {}
         self.gradient_list = []
         self.data_loader, self.val_loader, self.num_batches = get_data_loader(max_learners=self.max_learners)
         self.global_model = model
         self.global_optimizer = optimizer_function(self.global_model)
         self.device = device
+        self.learner_count = 0
         self.accumulation_count = 0
         logging.info("Leader service initialized")
 
     def RegisterLearner(self, request, context):
         logging.info(f"Registering learner: network_addr={request.network_addr}")
-        if len(self.learner_list) < self.max_learners:
+        if len(self.learners.values()) < self.max_learners:
             # learners < expected, then register them
-            new_id = len(self.learner_list)
             learner_stub = learner_pb2_grpc.LearnerServiceStub(
                 grpc.insecure_channel(request.network_addr, options=GRPC_STUB_OPTIONS)
             )
-            new_id = 0
+            
             with self.lock:
-                new_id = len(self.learner_list)
-                # knowing num_batches allows to know when training is done, all learners should have equal # od batches
-                self.learner_list.append({
-                        'id': new_id,
-                        'network_addr': request.network_addr,
-                        'batches_consumed': 0, 
-                        'stub': learner_stub,
-                        'data_loader': self.data_loader[new_id],
-                    })
-            # if learners = expected, then start training on all of them
-            if new_id + 1 == self.max_learners:
-                thread = threading.Thread(target=self.start_training)
-                thread.start()
+                new_id = self.learner_count
+                self.learner_count += 1
+            
+            if request.network_addr in self.learners.values():
+                return leader_pb2.Ack(success=False, message="Learner address already in use")
+            
+            # knowing num_batches allows to know when training is done, all learners should have equal # od batches
+            self.learners[request.network_addr] = {
+                    'id': new_id,
+                    'batches_consumed': 0, 
+                    'stub': learner_stub,
+                    'network_addr': request.network_addr,
+                    'data_loader': self.data_loader[new_id],
+                }
+            
+            with self.lock:
+                # if learners = expected, then start training on all of them
+                if len(self.learners.values()) == self.max_learners:
+                    thread = threading.Thread(target=self.start_training)
+                    thread.start()
+            
             return leader_pb2.AckWithMetadata(success=True, message="Registered learner", learner_id=new_id, max_learners=self.max_learners)
         else:
             return leader_pb2.Ack(success=False, message="Max learners reached")
@@ -64,7 +72,7 @@ class LeaderService(leader_pb2_grpc.LeaderServiceServicer):
     def start_training(self):
         time.sleep(3) # Start up time for the last learner
         logging.info("Starting training across all registered learners.")
-        for learner in self.learner_list:
+        for learner in self.learners.values():
             learner['stub'].StartTraining(learner_pb2.Empty())
 
     def GetModel(self, request, context):
@@ -85,7 +93,7 @@ class LeaderService(leader_pb2_grpc.LeaderServiceServicer):
     def GetData(self, request, context):
         logging.info(f"Sending data to learner network_addr {request.network_addr}")
         # get learner that requested the data
-        learner = next((l for l in self.learner_list if l['network_addr'] == request.network_addr), None)
+        learner = self.learners[request.network_addr]
         if not learner:
             context.abort(grpc.StatusCode.NOT_FOUND, 'Learner not found')
             return
@@ -111,7 +119,7 @@ class LeaderService(leader_pb2_grpc.LeaderServiceServicer):
                 yield leader_pb2.DataChunk(chunk=serialized_batch)
                 learner['batches_consumed'] += 1
 
-        logging.info(f"Learner {learner['id']} is getting batches {start_index + 1} to {end_index} of {self.num_batches}")
+        logging.info(f"Learner {learner['network_addr']} is getting batches {start_index + 1} to {end_index} of {self.num_batches}")
 
             
 
@@ -123,7 +131,7 @@ class LeaderService(leader_pb2_grpc.LeaderServiceServicer):
             gradients = torch.load(buffer)
             self.gradient_list.append(gradients)
             
-            if len(self.gradient_list) == len(self.learner_list):
+            if len(self.gradient_list) == len(self.learners.values()):
                 self.update_and_broadcast_model()
                 self.gradient_list = []
 
@@ -177,7 +185,7 @@ class LeaderService(leader_pb2_grpc.LeaderServiceServicer):
             thread.start()
         
         # send model state back to learners for sync
-        for learner in self.learner_list:
+        for learner in self.learners.values():
             serialized_model_state = learner_pb2.ModelState(chunk=serialized_model_state_dict)
             learner['stub'].SyncModelState(serialized_model_state)
     
@@ -203,6 +211,15 @@ class LeaderService(leader_pb2_grpc.LeaderServiceServicer):
 
         # program ends
         os._exit(0)
+        
+    def DropLearner(self, request, context):
+        with self.lock:
+            network_addr = request.chunk.decode("utf-8")
+            logging.info(f"Dropping learner: network_addr={network_addr}")
+            # Removes learner
+            self.learners.pop(network_addr, None)
+            return leader_pb2.Ack(success=True, message="Learner dropped")
+            
 
 def serve(learner_count):
     logging.info("Starting leader service...")

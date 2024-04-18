@@ -34,6 +34,11 @@ class LeaderServiceStub(object):
                 request_serializer=protos_dot_leader__pb2.GradientData.SerializeToString,
                 response_deserializer=protos_dot_leader__pb2.Ack.FromString,
                 )
+        self.DropLearner = channel.unary_unary(
+                '/leader.LeaderService/DropLearner',
+                request_serializer=protos_dot_leader__pb2.LearnerInfo.SerializeToString,
+                response_deserializer=protos_dot_leader__pb2.AckWithMetadata.FromString,
+        )
 
 
 class LeaderServiceServicer(object):
@@ -62,7 +67,11 @@ class LeaderServiceServicer(object):
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
-
+    def DropLearner(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
 
 def add_LeaderServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -83,6 +92,11 @@ def add_LeaderServiceServicer_to_server(servicer, server):
             ),
             'AccumulateGradients': grpc.unary_unary_rpc_method_handler(
                     servicer.AccumulateGradients,
+                    request_deserializer=protos_dot_leader__pb2.GradientData.FromString,
+                    response_serializer=protos_dot_leader__pb2.Ack.SerializeToString,
+            ),
+            'DropLearner': grpc.unary_unary_rpc_method_handler(
+                    servicer.DropLearner,
                     request_deserializer=protos_dot_leader__pb2.GradientData.FromString,
                     response_serializer=protos_dot_leader__pb2.Ack.SerializeToString,
             ),
@@ -161,5 +175,22 @@ class LeaderService(object):
         return grpc.experimental.unary_unary(request, target, '/leader.LeaderService/AccumulateGradients',
             protos_dot_leader__pb2.GradientData.SerializeToString,
             protos_dot_leader__pb2.Ack.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+            
+    @staticmethod
+    def DropLearner(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/leader.LeaderService/DropLearner',
+            protos_dot_leader__pb2.LearnerInfo.SerializeToString,
+            protos_dot_leader__pb2.AckWithMetadata.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
