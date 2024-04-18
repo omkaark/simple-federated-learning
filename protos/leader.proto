@@ -7,6 +7,7 @@ service LeaderService {
     rpc GetModel(Empty) returns (stream ModelChunk) {};
     rpc GetData(LearnerDataRequest) returns (stream DataChunk) {};
     rpc AccumulateGradients(GradientData) returns (Ack) {};
+    rpc DropLearner(LearnerInfo) returns (AckWithMetadata) {};
 }
 
 message LearnerInfo {
@@ -41,4 +42,8 @@ message DataChunk {
 
 message GradientData {
     bytes chunk = 1;
+}
+
+message DropLearner {
+    string network_addr = 1;
 }

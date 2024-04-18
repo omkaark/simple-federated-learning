@@ -20,7 +20,7 @@ def load_dataset(data_dir, train=True, transform=None):
     """Load a dataset."""
     return datasets.CIFAR10(root=data_dir, train=train, download=True, transform=transform)
 
-def get_data_loader(data_dir='./data', test=False, valid=False, learner_id=0, max_learners=1):
+def get_data_loader(data_dir='./data', test=False, max_learners=1):
     """Create and return data loaders for training and validation/test, equally divided among learners."""
     transform = get_transform()
     if test:
@@ -42,21 +42,22 @@ def get_data_loader(data_dir='./data', test=False, valid=False, learner_id=0, ma
     # Distribute indices evenly among learners
     per_learner = len(train_idx) // max_learners
     extra_samples = len(train_idx) % max_learners
-    start_idx = learner_id * per_learner + min(learner_id, extra_samples)
-    end_idx = start_idx + per_learner + (1 if learner_id < extra_samples else 0)
+    
+    train_loader = []
+    
+    for i in range(max_learners):
+        start_idx = i * per_learner + min(i, extra_samples)
+        end_idx = start_idx + per_learner + (1 if i < extra_samples else 0)
 
-    # Calculate the number of batches
-    num_samples_for_learner = end_idx - start_idx
-    num_batches = num_samples_for_learner // 32 + (num_samples_for_learner % 32 > 0)
+        # Calculate the number of batches
+        num_samples_for_learner = end_idx - start_idx
+        num_batches = num_samples_for_learner // 32 + (num_samples_for_learner % 32 > 0)
 
-    # Use Subset to directly slice the dataset without sampling
-    train_subset = Subset(dataset, train_idx[start_idx:end_idx])
+        # Use Subset to directly slice the dataset without sampling
+        train_subset = Subset(dataset, train_idx[start_idx:end_idx])
+        train_loader.append(DataLoader(train_subset, batch_size=32))
+        
     valid_subset = Subset(dataset, valid_idx)
-
-    train_loader = DataLoader(train_subset, batch_size=32)
     valid_loader = DataLoader(valid_subset, batch_size=32)
 
-    if valid:
-        return valid_loader
-    else:
-        return train_loader, num_batches
+    return train_loader, valid_loader, num_batches
